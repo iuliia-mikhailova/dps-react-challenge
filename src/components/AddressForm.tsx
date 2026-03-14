@@ -7,10 +7,15 @@ export function AddressForm() {
 		isPostalDropdown,
 		uniqueSortedPostalCodes,
 		error,
-		hasActiveLookup,
-		handleLocalityChange,
-		handlePostalCodeChange,
+		errorSource,
 		isLocked,
+		uniqueLocalityNames,
+		isSuggestionsOpen,
+		handleLocalityChange,
+		handleLocalityKeyDown,
+		handlePostalCodeChange,
+		selectLocalitySuggestion,
+		closeSuggestions,
 		clear,
 	} = useGermanAddressValidator();
 
@@ -27,31 +32,62 @@ export function AddressForm() {
 					event.preventDefault();
 				}}
 			>
-				<div className="form-field">
+				<div className="form-field form-field--autocomplete">
 					<label htmlFor="locality">Locality (city / town)</label>
 					<div
-						className={`field-input-wrapper${isLocked ? ' field-input-wrapper--success' : ''}`}
+						className={`field-input-wrapper${isLocked ? ' field-input-wrapper--success' : ''}${error && errorSource === 'locality' ? ' field-input-wrapper--error' : ''}`}
 					>
 						<input
 							id="locality"
 							type="text"
 							value={locality}
 							onChange={(event) => handleLocalityChange(event.target.value)}
+							onKeyDown={handleLocalityKeyDown}
+							onBlur={() => setTimeout(closeSuggestions, 200)}
 							placeholder="e.g. Berlin"
 							autoComplete="off"
 							disabled={isLocked}
+							aria-autocomplete="list"
+							aria-expanded={isSuggestionsOpen}
 						/>
+						{isSuggestionsOpen && uniqueLocalityNames.length > 0 && (
+							<ul
+								className="locality-suggestions"
+								role="listbox"
+								aria-label="City suggestions"
+							>
+								{uniqueLocalityNames.map((name) => (
+									<li
+										key={name}
+										role="option"
+										className="locality-suggestion-item"
+										onMouseDown={(e) => {
+											e.preventDefault();
+											selectLocalitySuggestion(name);
+										}}
+									>
+										{name}
+									</li>
+								))}
+							</ul>
+						)}
 					</div>
-					<p className="field-hint">
-						Type a locality name to look up one or more matching postal codes.
-					</p>
+					<div className="field-message">
+						{error && errorSource === 'locality' ? (
+							<span className="field-message-error">{error}</span>
+						) : (
+							<span className="field-message-hint">
+								Type a city name and pick from suggestions, or press Enter to search.
+							</span>
+						)}
+					</div>
 				</div>
 
 				<div className="form-field">
 					<label htmlFor="postalCode">Postal Code (PLZ)</label>
 
 					<div
-						className={`field-input-wrapper${isLocked ? ' field-input-wrapper--success' : ''}`}
+						className={`field-input-wrapper${isLocked ? ' field-input-wrapper--success' : ''}${error && errorSource === 'postal' ? ' field-input-wrapper--error' : ''}`}
 					>
 						{isPostalDropdown ? (
 							<select
@@ -84,25 +120,30 @@ export function AddressForm() {
 						)}
 					</div>
 
-					<p className="field-hint">
-						Type a 5-digit German PLZ to auto-fill the locality field.
-					</p>
+					<div className="field-message">
+						{error && errorSource === 'postal' ? (
+							<span className="field-message-error">{error}</span>
+						) : (
+							<span className="field-message-hint">
+								Type a 5-digit German PLZ to auto-fill the locality field.
+							</span>
+						)}
+					</div>
 				</div>
 
-				{hasActiveLookup && (
-					<p className="status-message">Looking up data from the Open PLZ API…</p>
-				)}
-				{error && <p className="error-message">{error}</p>}
-
-				{(isLocked || locality || postalCode) && (
+				<div className="form-clear-slot">
 					<button
 						type="button"
 						onClick={clear}
 						disabled={!locality && !postalCode && !isLocked}
+						style={{
+							visibility:
+								isLocked || locality || postalCode ? 'visible' : 'hidden',
+						}}
 					>
 						Clear
 					</button>
-				)}
+				</div>
 			</form>
 
 			<p className="footer-note">

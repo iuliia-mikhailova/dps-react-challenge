@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { LastEditedField, LocalityResult } from '../types/address';
 
 const API_BASE_URL = 'https://openplzapi.org/de/Localities';
@@ -11,11 +11,17 @@ export function useGermanAddressValidator() {
 	const [postalCodeOptions, setPostalCodeOptions] = useState<string[]>([]);
 	const [isPostalDropdown, setIsPostalDropdown] = useState(false);
 
+	const [localitySuggestions, setLocalitySuggestions] = useState<LocalityResult[]>([]);
+	const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+
 	const [error, setError] = useState<string | null>(null);
+	const [errorSource, setErrorSource] = useState<'locality' | 'postal' | null>(null);
 	const [isLoadingLocality, setIsLoadingLocality] = useState(false);
 	const [isLoadingPostal, setIsLoadingPostal] = useState(false);
 	const [lastEditedField, setLastEditedField] = useState<LastEditedField>(null);
 	const [isLocked, setIsLocked] = useState(false);
+
+	const localityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
 	const hasActiveLookup = isLoadingLocality || isLoadingPostal;
 
@@ -24,19 +30,100 @@ export function useGermanAddressValidator() {
 		[postalCodeOptions],
 	);
 
+	const fetchLocalitySuggestions = useCallback(async (query: string) => {
+		const trimmed = query.trim();
+		if (!trimmed) {
+			setLocalitySuggestions([]);
+			setIsSuggestionsOpen(false);
+			return;
+		}
+		try {
+			setIsLoadingLocality(true);
+			setError(null);
+			setErrorSource(null);
+			const url = `${API_BASE_URL}?name=${encodeURIComponent(trimmed)}`;
+			const response = await fetch(url);
+			if (!response.ok) throw new Error(`Request failed with status ${response.status}`);
+			const data = (await response.json()) as LocalityResult[];
+			if (!Array.isArray(data) || data.length === 0) {
+				setLocalitySuggestions([]);
+				setIsSuggestionsOpen(false);
+				setError('No postal codes found for this locality.');
+				setErrorSource('locality');
+				return;
+			}
+			setLocalitySuggestions(data);
+			setIsSuggestionsOpen(true);
+		} catch {
+			setError('There was a problem looking up postal codes. Please try again.');
+			setErrorSource('locality');
+			setLocalitySuggestions([]);
+			setIsSuggestionsOpen(false);
+		} finally {
+			setIsLoadingLocality(false);
+		}
+	}, []);
+
 	const handleLocalityChange = (value: string) => {
 		if (isLocked) return;
 
 		setLocality(value);
 		setLastEditedField('locality');
 		setError(null);
-
+		setErrorSource(null);
 		setPostalCodeOptions([]);
 		setIsPostalDropdown(false);
 		if (!value.trim()) {
 			setPostalCode('');
+			setLocalitySuggestions([]);
+			setIsSuggestionsOpen(false);
 		}
 	};
+
+	const handleLocalityKeyDown = useCallback(
+		(e: React.KeyboardEvent) => {
+			if (e.key !== 'Enter') return;
+			e.preventDefault();
+			if (localityDebounceRef.current) {
+				clearTimeout(localityDebounceRef.current);
+				localityDebounceRef.current = null;
+			}
+			fetchLocalitySuggestions(locality);
+		},
+		[locality, fetchLocalitySuggestions],
+	);
+
+	const selectLocalitySuggestion = useCallback(
+		(selectedName: string) => {
+			const matches = localitySuggestions.filter((r) => r.name === selectedName);
+			if (matches.length === 0) return;
+
+			const uniquePlz = [...new Set(matches.map((r) => r.postalCode).filter(Boolean))];
+
+			setLocality(selectedName);
+			setLocalitySuggestions([]);
+			setIsSuggestionsOpen(false);
+			setLastEditedField(null);
+			setError(null);
+			setErrorSource(null);
+
+			if (uniquePlz.length === 1) {
+				setPostalCode(uniquePlz[0]);
+				setIsPostalDropdown(false);
+				setPostalCodeOptions([]);
+				setIsLocked(true);
+			} else {
+				setPostalCodeOptions(uniquePlz.sort((a, b) => a.localeCompare(b)));
+				setIsPostalDropdown(true);
+				setPostalCode('');
+			}
+		},
+		[localitySuggestions],
+	);
+
+	const closeSuggestions = useCallback(() => {
+		setIsSuggestionsOpen(false);
+	}, []);
 
 	const handlePostalCodeChange = (value: string) => {
 		if (isLocked) return;
@@ -44,7 +131,7 @@ export function useGermanAddressValidator() {
 		setPostalCode(value);
 		setLastEditedField('postalCode');
 		setError(null);
-		// Lock when user selects a PLZ from the dropdown (both fields are then valid)
+		setErrorSource(null);
 		if (isPostalDropdown && value.trim()) {
 			setIsLocked(true);
 		}
@@ -55,108 +142,23 @@ export function useGermanAddressValidator() {
 
 		const trimmed = locality.trim();
 		if (!trimmed) {
-			setIsPostalDropdown(false);
-			setPostalCodeOptions([]);
+			setLocalitySuggestions([]);
+			setIsSuggestionsOpen(false);
 			return;
 		}
 
-		const timeoutId = window.setTimeout(async () => {
-			try {
-				setIsLoadingLocality(true);
-				setError(null);
-
-				const url = `${API_BASE_URL}?name=${encodeURIComponent(trimmed)}`;
-				const response = await fetch(url);
-
-				if (!response.ok) {
-					throw new Error(`Request failed with status ${response.status}`);
-				}
-
-				const data = (await response.json()) as LocalityResult[];
-
-				// #region agent log
-				fetch('http://127.0.0.1:7792/ingest/25ab2644-8148-4897-99f9-75bcb385d073', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'X-Debug-Session-Id': '2a621b',
-					},
-					body: JSON.stringify({
-						sessionId: '2a621b',
-						runId: 'initial-locality',
-						hypothesisId: 'H1',
-						location: 'useGermanAddressValidator.ts:localityEffect',
-						message: 'Locality lookup response',
-						data: {
-							url,
-							isArray: Array.isArray(data),
-							length: Array.isArray(data) ? data.length : null,
-							sample: Array.isArray(data) && data.length > 0 ? data[0] : null,
-						},
-						timestamp: Date.now(),
-					}),
-				}).catch(() => {});
-				// #endregion
-
-				if (!Array.isArray(data) || data.length === 0) {
-					setIsPostalDropdown(false);
-					setPostalCodeOptions([]);
-					setPostalCode('');
-					setError('No postal codes found for this locality.');
-					return;
-				}
-
-				const postalCodes = data.map((item) => item.postalCode).filter(Boolean);
-				const uniquePostalCodes = [...new Set(postalCodes)];
-
-				// #region agent log
-				fetch('http://127.0.0.1:7792/ingest/25ab2644-8148-4897-99f9-75bcb385d073', {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						'X-Debug-Session-Id': '2a621b',
-					},
-					body: JSON.stringify({
-						sessionId: '2a621b',
-						runId: 'initial-locality',
-						hypothesisId: 'H2',
-						location: 'useGermanAddressValidator.ts:localityEffect',
-						message: 'Derived postal code list from locality lookup',
-						data: {
-							rawCount: Array.isArray(data) ? data.length : null,
-							postalCodesLength: postalCodes.length,
-							uniquePostalCodesLength: uniquePostalCodes.length,
-							firstPostalCode: postalCodes[0] ?? null,
-						},
-						timestamp: Date.now(),
-					}),
-				}).catch(() => {});
-				// #endregion
-
-				if (uniquePostalCodes.length === 1) {
-					setPostalCode(uniquePostalCodes[0]);
-					setIsPostalDropdown(false);
-					setPostalCodeOptions([]);
-					setIsLocked(true);
-				} else {
-					setPostalCodeOptions(uniquePostalCodes);
-					setIsPostalDropdown(true);
-
-					if (!uniquePostalCodes.includes(postalCode)) {
-						setPostalCode('');
-					}
-				}
-			} catch {
-				setError('There was a problem looking up postal codes. Please try again.');
-			} finally {
-				setIsLoadingLocality(false);
-			}
+		localityDebounceRef.current = window.setTimeout(() => {
+			localityDebounceRef.current = null;
+			fetchLocalitySuggestions(locality);
 		}, DEBOUNCE_MS);
 
 		return () => {
-			window.clearTimeout(timeoutId);
+			if (localityDebounceRef.current) {
+				clearTimeout(localityDebounceRef.current);
+				localityDebounceRef.current = null;
+			}
 		};
-	}, [locality, lastEditedField, postalCode]);
+	}, [locality, lastEditedField, fetchLocalitySuggestions]);
 
 	useEffect(() => {
 		if (lastEditedField !== 'postalCode') return;
@@ -164,21 +166,28 @@ export function useGermanAddressValidator() {
 		const trimmed = postalCode.trim();
 		if (!trimmed) {
 			setLocality('');
-			return;
-		}
-
-		const isFiveDigitNumber = /^\d{5}$/.test(trimmed);
-		if (!isFiveDigitNumber) {
-			setError('Please enter a valid 5-digit German postal code.');
+			setError(null);
+			setErrorSource(null);
 			return;
 		}
 
 		const timeoutId = window.setTimeout(async () => {
+			const currentTrimmed = postalCode.trim();
+			if (!currentTrimmed) return;
+
+			const isFiveDigitNumber = /^\d{5}$/.test(currentTrimmed);
+			if (!isFiveDigitNumber) {
+				setError('Please enter a valid 5-digit German postal code.');
+				setErrorSource('postal');
+				return;
+			}
+
 			try {
 				setIsLoadingPostal(true);
 				setError(null);
+				setErrorSource(null);
 
-				const url = `${API_BASE_URL}?postalCode=${encodeURIComponent(trimmed)}`;
+				const url = `${API_BASE_URL}?postalCode=${encodeURIComponent(currentTrimmed)}`;
 				const response = await fetch(url);
 
 				if (!response.ok) {
@@ -229,7 +238,7 @@ export function useGermanAddressValidator() {
 							message: 'Postal code lookup returned no results',
 							data: {
 								currentLocalityBeforeClearAttempt: locality,
-								currentPostalCode,
+								currentPostalCode: postalCode,
 							},
 							timestamp: Date.now(),
 						}),
@@ -238,6 +247,7 @@ export function useGermanAddressValidator() {
 
 					setLocality('');
 					setError('This postal code is not valid in Germany.');
+					setErrorSource('postal');
 					return;
 				}
 
@@ -248,6 +258,7 @@ export function useGermanAddressValidator() {
 				setIsLocked(true);
 			} catch {
 				setError('There was a problem validating the postal code. Please try again.');
+				setErrorSource('postal');
 			} finally {
 				setIsLoadingPostal(false);
 			}
@@ -263,10 +274,32 @@ export function useGermanAddressValidator() {
 		setPostalCode('');
 		setPostalCodeOptions([]);
 		setIsPostalDropdown(false);
+		setLocalitySuggestions([]);
+		setIsSuggestionsOpen(false);
 		setError(null);
+		setErrorSource(null);
 		setIsLocked(false);
 		setLastEditedField(null);
 	};
+
+	const uniqueLocalityNames = useMemo(() => {
+		const names = [...new Set(localitySuggestions.map((r) => r.name).filter(Boolean))];
+		const q = locality.trim().toLowerCase();
+		if (!q) return names.sort((a, b) => a.localeCompare(b));
+		return names.sort((a, b) => {
+			const aLower = a.toLowerCase();
+			const bLower = b.toLowerCase();
+			const aStarts = aLower.startsWith(q);
+			const bStarts = bLower.startsWith(q);
+			if (aStarts && !bStarts) return -1;
+			if (!aStarts && bStarts) return 1;
+			const aContains = aLower.includes(q);
+			const bContains = bLower.includes(q);
+			if (aContains && !bContains) return -1;
+			if (!aContains && bContains) return 1;
+			return a.localeCompare(b);
+		});
+	}, [localitySuggestions, locality]);
 
 	return {
 		locality,
@@ -274,10 +307,17 @@ export function useGermanAddressValidator() {
 		isPostalDropdown,
 		uniqueSortedPostalCodes,
 		error,
+		errorSource,
 		hasActiveLookup,
 		isLocked,
+		localitySuggestions,
+		uniqueLocalityNames,
+		isSuggestionsOpen,
 		handleLocalityChange,
+		handleLocalityKeyDown,
 		handlePostalCodeChange,
+		selectLocalitySuggestion,
+		closeSuggestions,
 		clear,
 	};
 }

@@ -73,6 +73,43 @@
 	width: 100%;
 }
 
+.form-field--autocomplete .field-input-wrapper {
+	position: relative;
+}
+
+.locality-suggestions {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	right: 0;
+	z-index: 10;
+	margin: 2px 0 0;
+	padding: 0;
+	list-style: none;
+	background-color: #2a2a2a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 8px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	max-height: 240px;
+	overflow-y: auto;
+}
+
+.locality-suggestion-item {
+	padding: 0.6rem 0.75rem;
+	cursor: pointer;
+	font-size: 0.95rem;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	transition: background-color 0.15s;
+}
+
+.locality-suggestion-item:last-child {
+	border-bottom: none;
+}
+
+.locality-suggestion-item:hover {
+	background-color: rgba(100, 108, 255, 0.2);
+}
+
 /* Higher specificity so success state overrides global input/select styles */
 .address-form .field-input-wrapper--success input,
 .address-form .field-input-wrapper--success select {
@@ -81,22 +118,45 @@
 	transition: border-color 0.2s, background-color 0.2s;
 }
 
-.field-hint {
+.address-form .field-input-wrapper--error input,
+.address-form .field-input-wrapper--error select {
+	border-color: rgba(239, 68, 68, 0.8) !important;
+	background-color: rgba(239, 68, 68, 0.06) !important;
+}
+
+.address-form .field-input-wrapper--error input:focus,
+.address-form .field-input-wrapper--error input:focus-visible,
+.address-form .field-input-wrapper--error select:focus,
+.address-form .field-input-wrapper--error select:focus-visible {
+	border-color: rgba(239, 68, 68, 0.9) !important;
+	outline-color: rgba(239, 68, 68, 0.8) !important;
+}
+
+.field-message {
+	min-height: 1.5rem;
 	margin: 0;
 	font-size: 0.8rem;
+	line-height: 1.4;
+}
+
+.field-message-hint {
 	color: #aaaaaa;
 }
 
-.status-message {
-	margin: 0.25rem 0 0;
+.field-message-error {
+	color: #ffb3b3;
 	font-size: 0.85rem;
-	color: #e0e0e0;
 }
 
-.error-message {
-	margin: 0.25rem 0 0;
-	font-size: 0.85rem;
-	color: #ffb3b3;
+.form-clear-slot {
+	min-height: 2.5rem;
+}
+
+.form-clear-slot button {
+	width: 100%;
+	padding: 12px 20px;
+	margin: 8px 0;
+	box-sizing: border-box;
 }
 
 .footer-note {
@@ -119,15 +179,11 @@
 		color: #5f6b7a;
 	}
 
-	.field-hint {
+	.field-message-hint {
 		color: #6b7280;
 	}
 
-	.status-message {
-		color: #374151;
-	}
-
-	.error-message {
+	.field-message-error {
 		color: #b91c1c;
 	}
 
@@ -135,6 +191,34 @@
 	.address-form .field-input-wrapper--success select {
 		border-color: rgba(34, 197, 94, 0.5) !important;
 		background-color: rgba(34, 197, 94, 0.08) !important;
+	}
+
+	.address-form .field-input-wrapper--error input,
+	.address-form .field-input-wrapper--error select {
+		border-color: rgba(185, 28, 28, 0.7) !important;
+		background-color: rgba(185, 28, 28, 0.06) !important;
+	}
+
+	.address-form .field-input-wrapper--error input:focus,
+	.address-form .field-input-wrapper--error input:focus-visible,
+	.address-form .field-input-wrapper--error select:focus,
+	.address-form .field-input-wrapper--error select:focus-visible {
+		border-color: rgba(185, 28, 28, 0.9) !important;
+		outline-color: rgba(185, 28, 28, 0.8) !important;
+	}
+
+	.locality-suggestions {
+		background-color: #ffffff;
+		border-color: rgba(0, 0, 0, 0.12);
+		box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+	}
+
+	.locality-suggestion-item {
+		border-bottom-color: rgba(0, 0, 0, 0.06);
+	}
+
+	.locality-suggestion-item:hover {
+		background-color: rgba(100, 108, 255, 0.1);
 	}
 
 	.footer-note {

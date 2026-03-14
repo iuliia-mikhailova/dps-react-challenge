@@ -53,7 +53,7 @@ button:hover,
 input:hover,
 textarea:hover,
 select:hover {
-	border: 1px solid #646cff;
+	border: 1px solid #2563eb;
 }
 
 select {
@@ -75,7 +75,7 @@ textarea:focus-visible,
 select:focus,
 select:focus-visible {
 	outline: 4px auto -webkit-focus-ring-color;
-	outline-color: #646cff;
+	outline-color: #2563eb;
 }
 
 input,
@@ -97,7 +97,7 @@ textarea {
 
 input:focus,
 textarea:focus {
-	border: 1px solid #646cff;
+	border: 1px solid #2563eb;
 }
 
 @media (prefers-color-scheme: light) {
